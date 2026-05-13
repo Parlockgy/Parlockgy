@@ -1,9 +1,9 @@
 --[[
-    🍎 APPLE Hub | v2.2 (STABLE & EXACT PATHS)
-    - Fix: Loadstring stability
-    - Minigame: PlayerBar Resizer (Target: Reel GUI)
-    - Teleport: Appraiser (Path: World.Spawns)
-    - Internal Lists: Offline support
+    🍎 APPLE Hub | v2.3 (MINIGAME OPTIMIZED)
+    - Fix: Bar Size (Target: PlayerGui.reel.bar.PlayerBar)
+    - Logic: Auto-detects 'reel' and applies scale immediately
+    - Teleport: Optimized for workspace.World.Spawns.Moosewood
+    - Internal Lists: Complete & Offline
 ]]
 
 -- LISTAS INTERNAS
@@ -35,6 +35,222 @@ local function GetInventoryFish()
     local fish = {}
     local player = game.Players.LocalPlayer
     local backpack = player:FindFirstChild("Backpack")
+    local char = player.Character
+    local function scan(container)
+        if not container then return end
+        for _, item in pairs(container:GetChildren()) do
+            if item:IsA("Tool") and not item.Name:lower():find("rod") then
+                table.insert(fish, item.Name)
+            end
+        end
+    end
+    scan(backpack)
+    scan(char)
+    return (#fish > 0) and fish or {"Nenhum peixe encontrado"}
+end
+
+local function IsARod(tool)
+    local name = tool.Name:lower()
+    for _, rod in pairs(AllRods) do if name == rod:lower() then return true end end
+    return name:find("rod") ~= nil
+end
+
+-- --- MENU INICIAL ---
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 300, 0, 200)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -100)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+Instance.new("UICorner", MainFrame)
+
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 60)
+Title.Text = "🍎 APPLE HUB"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.BackgroundTransparency = 1
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 22
+
+local function StartHub(mode)
+    ScreenGui:Destroy()
+    
+    local success, Rayfield = pcall(function()
+        return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+    end)
+    
+    if not success or not Rayfield then return end
+
+    local Window = Rayfield:CreateWindow({
+        Name = "🍎 APPLE Hub | " .. mode,
+        LoadingTitle = "Carregando Configurações...",
+        LoadingSubtitle = "v2.3 - Reel Fix",
+        ConfigurationSaving = { Enabled = false }
+    })
+
+    if mode == "Fisch" then
+        local FischTab = Window:CreateTab("Geral", 4483362458)
+        FischTab:CreateToggle({
+            Name = "Auto Equip Rod",
+            CurrentValue = false,
+            Callback = function(V) AutoEquipRod = V end,
+        })
+
+        local SpooferTab = Window:CreateTab("Minigame Spoofer", 4483362458)
+        SpooferTab:CreateToggle({
+            Name = "Bar Size Changer",
+            CurrentValue = false,
+            Callback = function(V) BarSizeChangerEnabled = V end,
+        })
+        SpooferTab:CreateSlider({
+            Name = "Bar Size Slider",
+            Range = {0.01, 1},
+            Increment = 0.01,
+            CurrentValue = 0.5,
+            Callback = function(V) BarSizeValue = V end,
+        })
+
+        local AutoTab = Window:CreateTab("Appraiser", 4483362458)
+        local AppToggle = AutoTab:CreateToggle({
+            Name = "Auto Appraiser",
+            CurrentValue = false,
+            Callback = function(V) AutoAppraiserEnabled = V end,
+        })
+        local FishDrop = AutoTab:CreateDropdown({
+            Name = "Peixe:",
+            Options = GetInventoryFish(),
+            CurrentOption = "",
+            Callback = function(O) SelectedFish = O end,
+        })
+        AutoTab:CreateButton({Name = "Atualizar Inv", Callback = function() FishDrop:Refresh(GetInventoryFish()) end})
+        AutoTab:CreateDropdown({
+            Name = "Mutação Alvo:",
+            Options = AllMutations,
+            CurrentOption = "None",
+            Callback = function(O) SelectedMutation = O end,
+        })
+        AutoTab:CreateToggle({Name = "Até Shiny", CurrentValue = false, Callback = function(V) StopAtShiny = V end})
+        AutoTab:CreateToggle({Name = "Até Sparkling", CurrentValue = false, Callback = function(V) StopAtSparkling = V end})
+    end
+
+    local MoveTab = Window:CreateTab("Movimentação", 4483362458)
+    MoveTab:CreateSlider({Name = "Velocidade", Range = {16, 300}, Increment = 1, CurrentValue = 16, Callback = function(V) WalkSpeedValue = V end})
+    MoveTab:CreateToggle({Name = "Infinite Jump", CurrentValue = false, Callback = function(V) InfiniteJumpEnabled = V end})
+
+    -- LOOP SPOOFER (Focado em PlayerGui.reel.bar.PlayerBar)
+    task.spawn(function()
+        while task.wait(0.05) do -- Delay menor para ser instantâneo
+            if BarSizeChangerEnabled then
+                pcall(function()
+                    local reel = game.Players.LocalPlayer.PlayerGui:FindFirstChild("reel")
+                    if reel then
+                        local barFrame = reel:FindFirstChild("bar")
+                        if barFrame then
+                            local playerBar = barFrame:FindFirstChild("PlayerBar")
+                            if playerBar and playerBar:IsA("Frame") then
+                                -- Força o tamanho baseado no Slider
+                                -- 1.0 no slider = 1.0 de escala (tamanho máximo do frame 'bar')
+                                playerBar.Size = UDim2.new(BarSizeValue, 0, playerBar.Size.Y.Scale, playerBar.Size.Y.Offset)
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    -- LOOP APPRAISER (Moosewood Path)
+    task.spawn(function()
+        while task.wait(0.6) do
+            if AutoAppraiserEnabled and SelectedFish ~= "" then
+                pcall(function()
+                    local lp = game.Players.LocalPlayer
+                    local char = lp.Character
+                    local tool = char:FindFirstChild(SelectedFish) or lp.Backpack:FindFirstChild(SelectedFish)
+                    
+                    if tool then
+                        if tool.Parent ~= char then char.Humanoid:EquipTool(tool) end
+                        
+                        local npc = nil
+                        -- Busca no World.Spawns.Moosewood
+                        local world = workspace:FindFirstChild("World")
+                        local targetFolder = world and world:FindFirstChild("Spawns") and world.Spawns:FindFirstChild("Moosewood")
+                        
+                        if targetFolder then
+                            npc = targetFolder:FindFirstChild("Appraiser")
+                        end
+
+                        -- Fallback de busca geral
+                        if not npc then
+                            for _, v in pairs(workspace:GetDescendants()) do
+                                if v.Name == "Appraiser" and v:IsA("Model") then
+                                    npc = v break
+                                end
+                            end
+                        end
+                        
+                        if npc then
+                            char.HumanoidRootPart.CFrame = npc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+                            task.wait(0.1)
+                            fireproximityprompt(npc:FindFirstChildOfClass("ProximityPrompt") or npc.HumanoidRootPart:FindFirstChild("ProximityPrompt"))
+                            
+                            local dg = lp.PlayerGui:FindFirstChild("DialogueGui") or lp.PlayerGui:FindFirstChild("AppraiserGui")
+                            if dg then
+                                for _, b in pairs(dg:GetDescendants()) do
+                                    if b:IsA("TextButton") and (b.Text == "1" or b.Name == "1") then b:Activate() end
+                                end
+                            end
+
+                            local n = tool.Name:lower()
+                            if (SelectedMutation ~= "None" and n:find(SelectedMutation:lower())) or (StopAtShiny and n:find("shiny")) or (StopAtSparkling and n:find("sparkling")) then
+                                AutoAppraiserEnabled = false
+                                AppToggle:Set(false)
+                                Rayfield:Notify({Title="🍎 APPLE HUB", Content="Requisitos atingidos!", Duration=5})
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    -- LOOP GERAIS
+    task.spawn(function()
+        while task.wait(0.5) do
+            if AutoEquipRod then
+                pcall(function()
+                    local char = game.Players.LocalPlayer.Character
+                    local hasRod = false
+                    for _, i in pairs(char:GetChildren()) do if i:IsA("Tool") and IsARod(i) then hasRod = true end end
+                    if not hasRod then
+                        for _, i in pairs(game.Players.LocalPlayer.Backpack:GetChildren()) do
+                            if i:IsA("Tool") and IsARod(i) then char.Humanoid:EquipTool(i) break end
+                        end
+                    end
+                end)
+            end
+            pcall(function() game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = WalkSpeedValue end)
+        end
+    end)
+end
+
+-- Botões de Entrada
+local function CreateBtn(txt, pos, color, cb)
+    local b = Instance.new("TextButton", MainFrame)
+    b.Size = UDim2.new(0.8, 0, 0, 40)
+    b.Position = pos
+    b.Text = txt
+    b.BackgroundColor3 = color
+    b.TextColor3 = Color3.new(1,1,1)
+    Instance.new("UICorner", b)
+    b.MouseButton1Click:Connect(cb)
+end
+
+CreateBtn("Fisch Mode 🎣", UDim2.new(0.1, 0, 0.35, 0), Color3.fromRGB(45, 110, 210), function() StartHub("Fisch") end)
+CreateBtn("Universal Mode 🌐", UDim2.new(0.1, 0, 0.65, 0), Color3.fromRGB(60, 60, 60), function() StartHub("Universal") end)
+
+game:GetService("UserInputService").JumpRequest:Connect(function()
+    if InfiniteJumpEnabled then pcall(function() game.Players.LocalPlayer.Character.Humanoid:ChangeState("Jumping") end) end
+end)    local backpack = player:FindFirstChild("Backpack")
     local char = player.Character
     local function scan(container)
         if not container then return end
