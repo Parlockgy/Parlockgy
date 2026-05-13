@@ -1,40 +1,250 @@
 --[[
-    🍎 APPLE Hub | Beta v1.8
-    - Adicionado Minigame Spoofer (Bar Size Changer)
-    - Correção no Teleport do Appraiser (Moosewood)
-    - Sistema de Listas via Web (Pastebin)
+    🍎 APPLE Hub | v1.8.1 (REVISADO)
+    - Minigame Spoofer (Bar Size Changer)
+    - Appraiser Teleport FIX
+    - Sistema de Carregamento Seguro
 ]]
 
 -- CONFIGURAÇÃO DE LINKS
 local RODS_DATA_URL = "https://pastebin.com/raw/hXj02GTr"
 local MUTATIONS_DATA_URL = "https://pastebin.com/raw/7NeWF36Y"
 
--- Variáveis Globais
+-- Variáveis de Estado
 local WalkSpeedValue = 16
 local AutoEquipRod = false
 local InfiniteJumpEnabled = false
-
--- Variáveis Minigame Spoofer
 local BarSizeChangerEnabled = false
-local BarSizeValue = 0.5 -- Padrão
-
--- Variáveis Auto Appraiser
+local BarSizeValue = 0.5
 local AutoAppraiserEnabled = false
 local SelectedFish = ""
 local SelectedMutation = "None"
 local StopAtShiny = false
 local StopAtSparkling = false
 
--- Tabelas de Dados
-local AllRods = {}
-local AllMutations = {"None"}
+-- Tabelas de Dados com Backup
+local AllRods = {"Flimsy Rod", "Training Rod", "Carbon Rod"}
+local AllMutations = {"None", "Albino", "Shiny", "Sparkling"}
 
--- Carregamento de Dados Externos
-local function FetchData(url, targetTable)
+-- Função de Carregamento Seguro (Não trava o script se o site cair)
+local function FetchDataSafe(url, targetTable)
     local success, content = pcall(function() return game:HttpGet(url) end)
-    if success and content then
+    if success and content and #content > 5 then
+        table.clear(targetTable)
+        if url == MUTATIONS_DATA_URL then table.insert(targetTable, "None") end
         for item in string.gmatch(content, "[^,]+") do
-            local cleanedItem = string.gsub(item, "^%s*(.-)%s*$", "%1")
+            local cleaned = string.gsub(item, "^%s*(.-)%s*$", "%1")
+            if cleaned ~= "" then table.insert(targetTable, cleaned) end
+        end
+    end
+end
+
+-- Tentar carregar dados da web
+FetchDataSafe(RODS_DATA_URL, AllRods)
+FetchDataSafe(MUTATIONS_DATA_URL, AllMutations)
+
+-- Funções Utilitárias
+local function GetInventoryFish()
+    local fish = {}
+    local player = game.Players.LocalPlayer
+    local backpack = player:FindFirstChild("Backpack")
+    local char = player.Character
+    local function scan(container)
+        if not container then return end
+        for _, item in pairs(container:GetChildren()) do
+            if item:IsA("Tool") and not item.Name:lower():find("rod") then
+                table.insert(fish, item.Name)
+            end
+        end
+    end
+    scan(backpack)
+    scan(char)
+    return (#fish > 0) and fish or {"Nenhum peixe encontrado"}
+end
+
+local function IsARod(tool)
+    local name = tool.Name:lower()
+    for _, rod in pairs(AllRods) do if name == rod:lower() then return true end end
+    return name:find("rod") ~= nil
+end
+
+-- --- MENU DE SELEÇÃO ---
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 300, 0, 200)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -100)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Instance.new("UICorner", MainFrame)
+
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 50)
+Title.Text = "🍎 APPLE HUB"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.BackgroundTransparency = 1
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 20
+
+local function StartHub(mode)
+    ScreenGui:Destroy()
+    local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+    local Window = Rayfield:CreateWindow({
+        Name = "🍎 APPLE Hub | " .. mode,
+        LoadingTitle = "Iniciando...",
+        LoadingSubtitle = "v1.8.1",
+        ConfigurationSaving = { Enabled = false }
+    })
+
+    if mode == "Fisch" then
+        local FischTab = Window:CreateTab("Geral", 4483362458)
+        FischTab:CreateToggle({
+            Name = "Auto Equip Rod",
+            CurrentValue = false,
+            Callback = function(V) AutoEquipRod = V end,
+        })
+
+        local SpooferTab = Window:CreateTab("Minigame", 4483362458)
+        SpooferTab:CreateSection("Minigame Spoofer")
+        SpooferTab:CreateToggle({
+            Name = "Bar Size Changer",
+            CurrentValue = false,
+            Callback = function(V) BarSizeChangerEnabled = V end,
+        })
+        SpooferTab:CreateSlider({
+            Name = "Bar Size (Largarura)",
+            Range = {0.01, 1},
+            Increment = 0.01,
+            CurrentValue = 0.5,
+            Callback = function(V) BarSizeValue = V end,
+        })
+
+        local AutoTab = Window:CreateTab("Appraiser", 4483362458)
+        local AppToggle = AutoTab:CreateToggle({
+            Name = "Auto Appraiser [Enabled]",
+            CurrentValue = false,
+            Callback = function(V) AutoAppraiserEnabled = V end,
+        })
+        local FishDrop = AutoTab:CreateDropdown({
+            Name = "Peixe:",
+            Options = GetInventoryFish(),
+            CurrentOption = "",
+            Callback = function(O) SelectedFish = O end,
+        })
+        AutoTab:CreateButton({Name = "Atualizar Inventário", Callback = function() FishDrop:Refresh(GetInventoryFish()) end})
+        AutoTab:CreateDropdown({
+            Name = "Mutação Alvo:",
+            Options = AllMutations,
+            CurrentOption = "None",
+            Callback = function(O) SelectedMutation = O end,
+        })
+        AutoTab:CreateToggle({Name = "Até Shiny", CurrentValue = false, Callback = function(V) StopAtShiny = V end})
+        AutoTab:CreateToggle({Name = "Até Sparkling", CurrentValue = false, Callback = function(V) StopAtSparkling = V end})
+    end
+
+    local MoveTab = Window:CreateTab("Movimentação", 4483362458)
+    MoveTab:CreateSlider({Name = "Velocidade", Range = {16, 500}, Increment = 1, CurrentValue = 16, Callback = function(V) WalkSpeedValue = V end})
+    MoveTab:CreateToggle({Name = "Infinite Jump", CurrentValue = false, Callback = function(V) InfiniteJumpEnabled = V end})
+
+    -- LOOP SPOOFER
+    task.spawn(function()
+        while task.wait(0.1) do
+            if BarSizeChangerEnabled then
+                pcall(function()
+                    local playerGui = game.Players.LocalPlayer.PlayerGui
+                    local minigame = playerGui:FindFirstChild("Minigame")
+                    if minigame then
+                        local bar = minigame:FindFirstChild("Bar", true)
+                        if bar and bar:IsA("Frame") then
+                            bar.Size = UDim2.new(BarSizeValue, 0, bar.Size.Y.Scale, bar.Size.Y.Offset)
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    -- LOOP APPRAISER
+    task.spawn(function()
+        while task.wait(0.5) do
+            if AutoAppraiserEnabled and SelectedFish ~= "" then
+                pcall(function()
+                    local char = game.Players.LocalPlayer.Character
+                    local tool = char:FindFirstChild(SelectedFish) or game.Players.LocalPlayer.Backpack:FindFirstChild(SelectedFish)
+                    if tool then
+                        if tool.Parent ~= char then char.Humanoid:EquipTool(tool) end
+                        local npc = nil
+                        for _, v in pairs(game.Workspace:GetDescendants()) do
+                            if v.Name == "Appraiser" and v:IsA("Model") then
+                                if v.Parent.Name:lower():find("moosewood") or v.Parent.Parent.Name:lower():find("moosewood") then
+                                    npc = v break
+                                end
+                            end
+                        end
+                        if npc then
+                            char.HumanoidRootPart.CFrame = npc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3.5)
+                            task.wait(0.2)
+                            fireproximityprompt(npc:FindFirstChildOfClass("ProximityPrompt") or npc.HumanoidRootPart:FindFirstChild("ProximityPrompt"))
+                            
+                            local dialog = game.Players.LocalPlayer.PlayerGui:FindFirstChild("DialogueGui") or game.Players.LocalPlayer.PlayerGui:FindFirstChild("AppraiserGui")
+                            if dialog then
+                                for _, b in pairs(dialog:GetDescendants()) do
+                                    if b:IsA("TextButton") and (b.Text == "1" or b.Name == "1") then b:Activate() end
+                                end
+                            end
+
+                            local n = tool.Name:lower()
+                            if (SelectedMutation ~= "None" and n:find(SelectedMutation:lower())) or (StopAtShiny and n:find("shiny")) or (StopAtSparkling and n:find("sparkling")) then
+                                AutoAppraiserEnabled = false
+                                AppToggle:Set(false)
+                                Rayfield:Notify({Title="Sucesso", Content="Peixe pronto!", Duration=5})
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    -- LOOPS GERAIS
+    task.spawn(function()
+        while task.wait(0.5) do
+            if AutoEquipRod then
+                pcall(function()
+                    local char = game.Players.LocalPlayer.Character
+                    local has = false
+                    for _, i in pairs(char:GetChildren()) do if i:IsA("Tool") and IsARod(i) then has = true end end
+                    if not has then
+                        for _, i in pairs(game.Players.LocalPlayer.Backpack:GetChildren()) do
+                            if i:IsA("Tool") and IsARod(i) then char.Humanoid:EquipTool(i) break end
+                        end
+                    end
+                end)
+            end
+            pcall(function() game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = WalkSpeedValue end)
+        end
+    end)
+end
+
+-- Botões de Entrada
+local b1 = Instance.new("TextButton", MainFrame)
+b1.Size = UDim2.new(0.8, 0, 0, 40)
+b1.Position = UDim2.new(0.1, 0, 0.35, 0)
+b1.Text = "Fisch Mode 🎣"
+b1.BackgroundColor3 = Color3.fromRGB(40, 100, 200)
+b1.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", b1)
+b1.MouseButton1Click:Connect(function() StartHub("Fisch") end)
+
+local b2 = Instance.new("TextButton", MainFrame)
+b2.Size = UDim2.new(0.8, 0, 0, 40)
+b2.Position = UDim2.new(0.1, 0, 0.65, 0)
+b2.Text = "Universal Mode 🌐"
+b2.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+b2.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", b2)
+b2.MouseButton1Click:Connect(function() StartHub("Universal") end)
+
+game:GetService("UserInputService").JumpRequest:Connect(function()
+    if InfiniteJumpEnabled then pcall(function() game.Players.LocalPlayer.Character.Humanoid:ChangeState("Jumping") end) end
+end)            local cleanedItem = string.gsub(item, "^%s*(.-)%s*$", "%1")
             if cleanedItem ~= "" then table.insert(targetTable, cleanedItem) end
         end
     end
