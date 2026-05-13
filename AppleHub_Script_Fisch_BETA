@@ -1,10 +1,12 @@
 --[[
-    🍎 APPLE Hub | v2.1 (WORLD PATH FIX)
-    - Localização exata do Appraiser em workspace.World
-    - Tabelas Internas (Sem dependência de links)
-    - Minigame Spoofer Integrado
+    🍎 APPLE Hub | v2.2 (STABLE & EXACT PATHS)
+    - Fix: Loadstring stability
+    - Minigame: PlayerBar Resizer (Target: Reel GUI)
+    - Teleport: Appraiser (Path: World.Spawns)
+    - Internal Lists: Offline support
 ]]
 
+-- LISTAS INTERNAS
 local AllRods = {
     "Flimsy Rod", "Training Rod", "Carbon Rod", "Fast Rod", "Lucky Rod", 
     "Long Rod", "Strong Rod", "Steady Rod", "Magma Rod", "Mythical Rod", 
@@ -53,7 +55,7 @@ local function IsARod(tool)
     return name:find("rod") ~= nil
 end
 
--- --- MENU INICIAL ---
+-- --- MENU INICIAL SEGURO ---
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Size = UDim2.new(0, 300, 0, 200)
@@ -71,11 +73,20 @@ Title.TextSize = 22
 
 local function StartHub(mode)
     ScreenGui:Destroy()
-    local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+    
+    local success, Rayfield = pcall(function()
+        return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+    end)
+    
+    if not success or not Rayfield then 
+        warn("Erro ao carregar Rayfield. Verifique sua conexão.")
+        return 
+    end
+
     local Window = Rayfield:CreateWindow({
         Name = "🍎 APPLE Hub | " .. mode,
-        LoadingTitle = "Iniciando Módulos...",
-        LoadingSubtitle = "v2.1 World Fix",
+        LoadingTitle = "Iniciando Fisch Script...",
+        LoadingSubtitle = "v2.2 Stable",
         ConfigurationSaving = { Enabled = false }
     })
 
@@ -87,14 +98,14 @@ local function StartHub(mode)
             Callback = function(V) AutoEquipRod = V end,
         })
 
-        local SpooferTab = Window:CreateTab("Minigame", 4483362458)
+        local SpooferTab = Window:CreateTab("Minigame Spoofer", 4483362458)
         SpooferTab:CreateToggle({
             Name = "Bar Size Changer",
             CurrentValue = false,
             Callback = function(V) BarSizeChangerEnabled = V end,
         })
         SpooferTab:CreateSlider({
-            Name = "Largura da Barra",
+            Name = "Bar Size Slider",
             Range = {0.01, 1},
             Increment = 0.01,
             CurrentValue = 0.5,
@@ -115,7 +126,7 @@ local function StartHub(mode)
         })
         AutoTab:CreateButton({Name = "Atualizar Inv", Callback = function() FishDrop:Refresh(GetInventoryFish()) end})
         AutoTab:CreateDropdown({
-            Name = "Mutação:",
+            Name = "Mutação Alvo:",
             Options = AllMutations,
             CurrentOption = "None",
             Callback = function(O) SelectedMutation = O end,
@@ -128,22 +139,26 @@ local function StartHub(mode)
     MoveTab:CreateSlider({Name = "Velocidade", Range = {16, 300}, Increment = 1, CurrentValue = 16, Callback = function(V) WalkSpeedValue = V end})
     MoveTab:CreateToggle({Name = "Infinite Jump", CurrentValue = false, Callback = function(V) InfiniteJumpEnabled = V end})
 
-    -- LOOP SPOOFER
+    -- LOOP SPOOFER (TARGET: playergui.reel.bar.playerbar)
     task.spawn(function()
         while task.wait(0.1) do
             if BarSizeChangerEnabled then
                 pcall(function()
-                    local mg = game.Players.LocalPlayer.PlayerGui:FindFirstChild("Minigame")
-                    if mg then
-                        local bar = mg:FindFirstChild("Bar", true)
-                        if bar then bar.Size = UDim2.new(BarSizeValue, 0, bar.Size.Y.Scale, bar.Size.Y.Offset) end
+                    local reel = game.Players.LocalPlayer.PlayerGui:FindFirstChild("reel")
+                    if reel then
+                        -- Procura especificamente o Frame 'PlayerBar' dentro da estrutura de pesca
+                        local playerBar = reel:FindFirstChild("PlayerBar", true) 
+                        if playerBar and playerBar:IsA("Frame") then
+                            -- Ajusta a largura baseada no slider (1.0 = Max)
+                            playerBar.Size = UDim2.new(BarSizeValue, 0, playerBar.Size.Y.Scale, playerBar.Size.Y.Offset)
+                        end
                     end
                 end)
             end
         end
     end)
 
-    -- LOOP APPRAISER (CAMINHO WORLD CORRIGIDO)
+    -- LOOP APPRAISER (PATH: World.Spawns)
     task.spawn(function()
         while task.wait(0.6) do
             if AutoAppraiserEnabled and SelectedFish ~= "" then
@@ -155,13 +170,24 @@ local function StartHub(mode)
                     if tool then
                         if tool.Parent ~= char then char.Humanoid:EquipTool(tool) end
                         
-                        -- Busca específica no World
+                        -- Busca o NPC no caminho World.Spawns
                         local npc = nil
                         local world = workspace:FindFirstChild("World")
                         if world then
-                            -- Procura Appraiser dentro de World (Moosewood geralmente fica em World.Spawns ou World.NPCs)
-                            for _, v in pairs(world:GetDescendants()) do
-                                if v.Name == "Appraiser" and v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") then
+                            local spawns = world:FindFirstChild("Spawns")
+                            if spawns then
+                                for _, v in pairs(spawns:GetDescendants()) do
+                                    if v.Name == "Appraiser" and v:IsA("Model") then
+                                        npc = v break
+                                    end
+                                end
+                            end
+                        end
+                        
+                        -- Fallback caso o caminho acima mude
+                        if not npc then
+                            for _, v in pairs(workspace:GetDescendants()) do
+                                if v.Name == "Appraiser" and v:IsA("Model") then
                                     npc = v break
                                 end
                             end
@@ -183,7 +209,7 @@ local function StartHub(mode)
                             if (SelectedMutation ~= "None" and n:find(SelectedMutation:lower())) or (StopAtShiny and n:find("shiny")) or (StopAtSparkling and n:find("sparkling")) then
                                 AutoAppraiserEnabled = false
                                 AppToggle:Set(false)
-                                Rayfield:Notify({Title="Sucesso", Content="Peixe pronto!", Duration=5})
+                                Rayfield:Notify({Title="Concluído!", Content="Mutação obtida!", Duration=5})
                             end
                         end
                     end
@@ -192,6 +218,7 @@ local function StartHub(mode)
         end
     end)
 
+    -- LOOPS GERAIS
     task.spawn(function()
         while task.wait(0.5) do
             if AutoEquipRod then
@@ -211,6 +238,7 @@ local function StartHub(mode)
     end)
 end
 
+-- Botoes de Seleção Iniciais
 local function CreateBtn(txt, pos, color, cb)
     local b = Instance.new("TextButton", MainFrame)
     b.Size = UDim2.new(0.8, 0, 0, 40)
@@ -227,19 +255,7 @@ CreateBtn("Universal Mode 🌐", UDim2.new(0.1, 0, 0.65, 0), Color3.fromRGB(60, 
 
 game:GetService("UserInputService").JumpRequest:Connect(function()
     if InfiniteJumpEnabled then pcall(function() game.Players.LocalPlayer.Character.Humanoid:ChangeState("Jumping") end) end
-end)    local backpack = player:FindFirstChild("Backpack")
-    local char = player.Character
-    local function scan(container)
-        if not container then return end
-        for _, item in pairs(container:GetChildren()) do
-            if item:IsA("Tool") and not item.Name:lower():find("rod") then
-                table.insert(fish, item.Name)
-            end
-        end
-    end
-    scan(backpack)
-    scan(char)
-    return (#fish > 0) and fish or {"Nenhum peixe encontrado"}
+end)nd fish or {"Nenhum peixe encontrado"}
 end
 
 local function IsARod(tool)
