@@ -1,24 +1,13 @@
 --[[
-    🍎 APPLE Hub | v2.3 (MINIGAME OPTIMIZED)
-    - Fix: Bar Size (Target: PlayerGui.reel.bar.PlayerBar)
-    - Logic: Auto-detects 'reel' and applies scale immediately
-    - Teleport: Optimized for workspace.World.Spawns.Moosewood
-    - Internal Lists: Complete & Offline
+    🍎 APPLE Hub | v2.4 (ULTIMATE REEL FIX)
+    - Alvo: PlayerGui.reel.bar.PlayerBar
+    - Teleporte: World.Spawns.Moosewood
+    - Sem dependências externas
 ]]
 
--- LISTAS INTERNAS
-local AllRods = {
-    "Flimsy Rod", "Training Rod", "Carbon Rod", "Fast Rod", "Lucky Rod", 
-    "Long Rod", "Strong Rod", "Steady Rod", "Magma Rod", "Mythical Rod", 
-    "Midas Rod", "Rod of the Depths", "Nocturnal Rod", "Celestial Rod"
-}
+local AllRods = {"Flimsy Rod", "Training Rod", "Carbon Rod", "Fast Rod", "Lucky Rod", "Long Rod", "Strong Rod", "Steady Rod", "Magma Rod", "Mythical Rod", "Midas Rod", "Rod of the Depths", "Nocturnal Rod", "Celestial Rod"}
+local AllMutations = {"None", "Albino", "Shiny", "Sparkling", "Giant", "Small", "Negative", "Golden", "Translucent", "Abyssal", "Lunar", "Solar", "Frozen", "Electric"}
 
-local AllMutations = {
-    "None", "Albino", "Shiny", "Sparkling", "Giant", "Small", "Negative", 
-    "Golden", "Translucent", "Abyssal", "Lunar", "Solar", "Frozen", "Electric"
-}
-
--- Variáveis de Estado
 local WalkSpeedValue = 16
 local AutoEquipRod = false
 local InfiniteJumpEnabled = false
@@ -30,11 +19,110 @@ local SelectedMutation = "None"
 local StopAtShiny = false
 local StopAtSparkling = false
 
--- Funções Utilitárias
 local function GetInventoryFish()
     local fish = {}
-    local player = game.Players.LocalPlayer
-    local backpack = player:FindFirstChild("Backpack")
+    pcall(function()
+        for _, item in pairs(game.Players.LocalPlayer.Backpack:GetChildren()) do
+            if item:IsA("Tool") and not item.Name:lower():find("rod") then table.insert(fish, item.Name) end
+        end
+        for _, item in pairs(game.Players.LocalPlayer.Character:GetChildren()) do
+            if item:IsA("Tool") and not item.Name:lower():find("rod") then table.insert(fish, item.Name) end
+        end
+    end)
+    return (#fish > 0) and fish or {"Nenhum peixe encontrado"}
+end
+
+-- GUI INICIAL
+local sg = Instance.new("ScreenGui", game.CoreGui)
+local frame = Instance.new("Frame", sg)
+frame.Size = UDim2.new(0, 250, 0, 150)
+frame.Position = UDim2.new(0.5, -125, 0.5, -75)
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Instance.new("UICorner", frame)
+
+local t = Instance.new("TextLabel", frame)
+t.Size = UDim2.new(1, 0, 0, 50)
+t.Text = "🍎 APPLE HUB V2.4"
+t.TextColor3 = Color3.new(1, 1, 1)
+t.BackgroundTransparency = 1
+t.Font = Enum.Font.GothamBold
+
+local function Start(mode)
+    sg:Destroy()
+    local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+    local Window = Rayfield:CreateWindow({
+        Name = "🍎 APPLE Hub | " .. mode,
+        LoadingTitle = "Fisch Edition",
+        ConfigurationSaving = {Enabled = false}
+    })
+
+    if mode == "Fisch" then
+        local Tab = Window:CreateTab("Principal")
+        Tab:CreateToggle({Name = "Auto Equip Rod", CurrentValue = false, Callback = function(v) AutoEquipRod = v end})
+        
+        local Spoofer = Window:CreateTab("Minigame")
+        Spoofer:CreateToggle({Name = "Bar Size Changer", CurrentValue = false, Callback = function(v) BarSizeChangerEnabled = v end})
+        Spoofer:CreateSlider({Name = "Bar Size", Range = {0.01, 1}, Increment = 0.01, CurrentValue = 0.5, Callback = function(v) BarSizeValue = v end})
+
+        local App = Window:CreateTab("Appraiser")
+        local AppTog = App:CreateToggle({Name = "Auto Appraiser", CurrentValue = false, Callback = function(v) AutoAppraiserEnabled = v end})
+        local Drop = App:CreateDropdown({Name = "Peixe:", Options = GetInventoryFish(), CurrentOption = "", Callback = function(v) SelectedFish = v end})
+        App:CreateButton({Name = "Refresh", Callback = function() Drop:Refresh(GetInventoryFish()) end})
+        App:CreateDropdown({Name = "Mutação:", Options = AllMutations, CurrentOption = "None", Callback = function(v) SelectedMutation = v end})
+    end
+
+    -- LOOP BAR SIZE (ESTRUTURA: reel.bar.PlayerBar)
+    task.spawn(function()
+        while task.wait(0.1) do
+            if BarSizeChangerEnabled then
+                pcall(function()
+                    local reel = game.Players.LocalPlayer.PlayerGui:FindFirstChild("reel")
+                    if reel then
+                        local playerBar = reel.bar:FindFirstChild("PlayerBar")
+                        if playerBar then
+                            playerBar.Size = UDim2.new(BarSizeValue, 0, playerBar.Size.Y.Scale, playerBar.Size.Y.Offset)
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    -- LOOP TELEPORT APPRAISER
+    task.spawn(function()
+        while task.wait(0.7) do
+            if AutoAppraiserEnabled and SelectedFish ~= "" then
+                pcall(function()
+                    local char = game.Players.LocalPlayer.Character
+                    local tool = char:FindFirstChild(SelectedFish) or game.Players.LocalPlayer.Backpack:FindFirstChild(SelectedFish)
+                    if tool then
+                        if tool.Parent ~= char then char.Humanoid:EquipTool(tool) end
+                        local npc = workspace.World.Spawns.Moosewood:FindFirstChild("Appraiser")
+                        if npc then
+                            char.HumanoidRootPart.CFrame = npc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+                            fireproximityprompt(npc:FindFirstChildOfClass("ProximityPrompt") or npc.HumanoidRootPart:FindFirstChild("ProximityPrompt"))
+                            local gui = game.Players.LocalPlayer.PlayerGui:FindFirstChild("DialogueGui")
+                            if gui then
+                                for _, b in pairs(gui:GetDescendants()) do
+                                    if b:IsA("TextButton") and b.Text == "1" then b:Activate() end
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+end
+
+local b = Instance.new("TextButton", frame)
+b.Size = UDim2.new(0.8, 0, 0, 40)
+b.Position = UDim2.new(0.1, 0, 0.5, 0)
+b.Text = "CARREGAR FISCH"
+b.BackgroundColor3 = Color3.fromRGB(40, 120, 200)
+b.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", b)
+b.MouseButton1Click:Connect(function() Start("Fisch") end)    local backpack = player:FindFirstChild("Backpack")
     local char = player.Character
     local function scan(container)
         if not container then return end
